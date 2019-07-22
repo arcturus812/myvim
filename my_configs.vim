@@ -6,7 +6,7 @@ set shiftwidth=4
 
 map <F11> :NERDTreeToggle<CR>
 map <F12> :Tlist<CR>
-let Tlist_Use_Right_Window = 1
+let Tlist_Use_Right_Window = 0
 
 set number
 
