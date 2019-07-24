@@ -4,6 +4,8 @@ set tabstop=4
 set expandtab
 set shiftwidth=4
 
+map <F1>  :vert resize 80<CR>
+map <F2>  :vert resize 30<CR>
 map <F10> :diffthis<CR>
 map <F11> :NERDTreeToggle<CR>
 map <F12> :Tlist<CR>
