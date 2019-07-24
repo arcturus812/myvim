@@ -4,13 +4,14 @@ set tabstop=4
 set expandtab
 set shiftwidth=4
 
+map <F10> :diffthis<CR>
 map <F11> :NERDTreeToggle<CR>
 map <F12> :Tlist<CR>
 let Tlist_Use_Right_Window = 0
 
 set number
 
-colorscheme desert
+colorscheme peaksea
 
 " [PHW] my cscope config
 let g:go_version_warning = 0
