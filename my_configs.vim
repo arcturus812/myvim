@@ -12,6 +12,8 @@ let Tlist_Use_Right_Window = 0
 set number
 
 colorscheme peaksea
+set background=dark
+set t_Co=256
 
 " [PHW] my cscope config
 let g:go_version_warning = 0
