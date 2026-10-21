@@ -41,7 +41,7 @@
 | `vimrcs/extended.vim` | 컬러스킴, persistent undo, 검색·quickfix |
 | `my_configs.vim` | 개인 설정 (Fn 키, ctags/cscope 자동화) |
 | `sources_non_forked/` | 외부 플러그인 (`update_plugins.py`로 갱신) |
-| `sources_forked/` | 수정본 플러그인 (peaksea, set_tabline) |
+| `sources_forked/` | 수정본 플러그인 (peaksea, set_tabline, blamer.nvim) |
 | `my_plugins/` | 추가 플러그인을 넣는 곳 (git 미추적) |
 
 ### 플러그인
@@ -50,7 +50,7 @@
 |---|---|
 | 탐색 | nerdtree, ctrlp.vim, taglist, ack.vim |
 | 편집 | vim-surround, vim-repeat, vim-commentary, auto-pairs, vim-indent-object, tabular |
-| Git | vim-fugitive, vim-gitgutter |
+| Git | vim-fugitive, vim-gitgutter, blamer.nvim |
 | 린트·UI | ale, lightline.vim, vim-markdown, gruvbox, peaksea |
 
 ### 플러그인 업데이트
@@ -96,6 +96,7 @@
 | 키 | 동작 |
 |---|---|
 | `:Git` / `:Git blame` | 상태 창 / 줄별 blame |
+| `,bl` | 현재 줄 옆 blame 표시 토글 (기본 켜짐, 저장 전 수정도 반영) |
 | `:Gvdiffsplit [rev]` / `:0Gclog` | 비교 / 현재 파일 이력 |
 | `,d` | gitgutter 토글 (기본 꺼짐, 아래 줄은 켠 뒤 동작) |
 | `]c` `[c` / `,hp` `,hs` `,hu` | 다음·이전 변경 / 미리보기·stage·되돌리기 |

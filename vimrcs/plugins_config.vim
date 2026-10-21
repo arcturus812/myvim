@@ -99,3 +99,14 @@ let g:ale_lint_on_enter = 0
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 let g:gitgutter_enabled=0
 nnoremap <silent> <leader>d :GitGutterToggle<cr>
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" => Blamer (inline git blame for the current line)
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+let g:blamer_enabled = 1
+let g:blamer_delay = 500
+let g:blamer_show_in_insert_modes = 0
+let g:blamer_show_in_visual_modes = 0
+let g:blamer_date_format = '%Y-%m-%d'
+nnoremap <silent> <leader>bl :BlamerToggle<cr>
