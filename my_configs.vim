@@ -18,7 +18,6 @@ set background=dark
 set t_Co=256
 
 " [PHW] my cscope config
-let g:go_version_warning = 0
 
 if filereadable("./cscope.out")
 	cs add ./cscope.out
