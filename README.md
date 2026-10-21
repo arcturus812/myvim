@@ -10,7 +10,7 @@
 
 | 도구 | 용도 |
 |---|---|
-| `ctags`, `cscope` | 정의/호출 관계 탐색, taglist(`F12`) |
+| `ctags`, `cscope` | 정의/호출 관계 탐색, tagbar outline(`F12`)·상태줄 현재 함수 |
 | `rg` 또는 `ag` | `,g` 프로젝트 검색 (없으면 `grep`으로 동작) |
 | `flake8` 등 린터 | ALE 린트 |
 
@@ -48,7 +48,7 @@
 
 | 분류 | 플러그인 |
 |---|---|
-| 탐색 | nerdtree, ctrlp.vim, taglist, ack.vim |
+| 탐색 | nerdtree, ctrlp.vim, tagbar, ack.vim |
 | 편집 | vim-surround, vim-repeat, vim-commentary, auto-pairs, vim-indent-object, tabular |
 | Git | vim-fugitive, vim-gitgutter, blamer.nvim |
 | 린트·UI | ale, lightline.vim, vim-markdown, gruvbox, peaksea |
@@ -76,7 +76,7 @@
 |---|---|
 | `F11` / `,nf` | NERDTree 토글 / 현재 파일 위치 표시 |
 | `,j` 또는 `Ctrl-f` / `Ctrl-b` | CtrlP 파일 / 버퍼 검색 |
-| `F12` | taglist (ctags 필요) |
+| `F12` | tagbar: 함수·클래스 outline 창 (ctags 필요, 상태줄에 현재 함수 표시) |
 | `Ctrl-]` / `Ctrl-t` | 정의로 이동 / 복귀 |
 | `Ctrl-\` + `g` `c` `d` `s` | cscope: 정의, 호출하는 곳, 호출되는 함수, 심볼 참조 |
 | `Ctrl-\` + `t` `e` `f` `i` | cscope: 텍스트, egrep, 파일, include하는 곳 |

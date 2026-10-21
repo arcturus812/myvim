@@ -8,12 +8,10 @@ map <F1>  :vert resize 80<CR>
 map <F2>  :vert resize 30<CR>
 map <F10> :diffthis<CR>
 map <F11> :NERDTreeToggle<CR>
-if executable('ctags')
-	map <F12> :Tlist<CR>
-else
-	map <F12> :echoerr 'taglist requires ctags (e.g. dnf install ctags)'<CR>
-endif
-let Tlist_Use_Right_Window = 0
+map <F12> :TagbarToggle<CR>
+let g:tagbar_position = 'topleft vertical'
+let g:tagbar_sort = 0
+let g:tagbar_compact = 1
 
 set number
 

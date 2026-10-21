@@ -24,7 +24,7 @@ gruvbox https://github.com/morhetz/gruvbox
 lightline.vim https://github.com/itchyny/lightline.vim
 nerdtree https://github.com/preservim/nerdtree
 tabular https://github.com/godlygeek/tabular
-taglist https://github.com/yegappan/taglist
+tagbar https://github.com/preservim/tagbar
 vim-commentary https://github.com/tpope/vim-commentary
 vim-fugitive https://github.com/tpope/vim-fugitive
 vim-gitgutter https://github.com/airblade/vim-gitgutter
