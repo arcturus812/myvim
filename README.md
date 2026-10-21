@@ -27,6 +27,8 @@
       sh /opt/vim_runtime/install_awesome_parameterized.sh /opt/vim_runtime user0 user1
       sh /opt/vim_runtime/install_awesome_parameterized.sh /opt/vim_runtime --all
 
+  이 경우 `,e`와 persistent undo 경로는 `~/.vim_runtime` 고정이라 동작하지 않는다.
+
 제거: `~/.vim_runtime` 삭제 후 `~/.vimrc`에서 `.vim_runtime` 관련 줄 삭제.
 
 ## 구성
@@ -63,6 +65,7 @@
   `~`, `/`에서는 생성하지 않는다.
 - cscope는 C/C++ 소스만 색인한다. 확장자는 `g:cscope_file_exts`로 바꿀 수 있다.
 - 생성 파일은 `.git/info/exclude`에 등록되어 `git status`에 나오지 않는다.
+- 쓰기 권한이 없는 디렉토리에서는 생성하지 않는다.
 - 자동 갱신은 없다. 코드가 바뀌면 `:MakeTags`로 다시 만든다.
 
 ## 주요 단축키 (리더 `,`)
@@ -94,7 +97,7 @@
 |---|---|
 | `:Git` / `:Git blame` | 상태 창 / 줄별 blame |
 | `:Gvdiffsplit [rev]` / `:0Gclog` | 비교 / 현재 파일 이력 |
-| `,d` | gitgutter 토글 (기본 꺼짐) |
+| `,d` | gitgutter 토글 (기본 꺼짐, 아래 줄은 켠 뒤 동작) |
 | `]c` `[c` / `,hp` `,hs` `,hu` | 다음·이전 변경 / 미리보기·stage·되돌리기 |
 | `F10` | `:diffthis` |
 | `,a` / `:ALEDetail` | 다음 린트 오류 / 상세 |

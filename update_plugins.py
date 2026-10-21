@@ -43,7 +43,7 @@ def download_extract_replace(plugin_name, zip_path, temp_dir, source_dir):
     temp_zip_path = path.join(temp_dir, plugin_name)
 
     # Download and extract file in temp dir
-    req = requests.get(zip_path)
+    req = requests.get(zip_path, timeout=60)
     req.raise_for_status()
     open(temp_zip_path, 'wb').write(req.content)
 

@@ -62,11 +62,11 @@ autocmd FileType css set omnifunc=csscomplete#CompleteCSS
 " Use ripgrep or the_silver_searcher if possible (much faster than Ack),
 " fall back to plain grep when no ack-like tool is installed
 if executable('rg')
-  let g:ackprg = 'rg --vimgrep --smart-case'
+  let g:ackprg = "rg --vimgrep --smart-case -g '!tags' -g '!cscope.*'"
 elseif executable('ag')
-  let g:ackprg = 'ag --vimgrep --smart-case'
+  let g:ackprg = "ag --vimgrep --smart-case --ignore tags --ignore 'cscope.*'"
 elseif !executable('ack') && !executable('ack-grep')
-  let g:ackprg = 'grep -rnIH --exclude-dir=.git'
+  let g:ackprg = "grep -rnIH --exclude-dir=.git --exclude=tags --exclude='cscope.*'"
 endif
 
 " When you press gv you Ack after the selected text

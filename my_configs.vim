@@ -29,7 +29,8 @@ set tags=./tags;,tags;
 
 let g:tags_project_markers = ['.git', 'Makefile', 'CMakeLists.txt']
 let g:cscope_file_exts = ['c', 'h', 'cc', 'cpp', 'cxx', 'hh', 'hpp', 'hxx']
-let s:tags_outputs = ['tags', 'cscope.files', 'cscope.out', 'cscope.in.out', 'cscope.po.out']
+let s:tags_outputs = ['tags', 'cscope.files', 'cscope.out', 'cscope.in.out', 'cscope.po.out',
+			\ 'ncscope.out', 'ncscope.in.out', 'ncscope.po.out']
 
 function! s:CscopeConnect(db) abort
 	if !filereadable(a:db)
@@ -56,6 +57,9 @@ endfunction
 function! s:GitExclude(dir) abort
 	let l:exclude = a:dir . '/.git/info/exclude'
 	if !isdirectory(a:dir . '/.git/info')
+		return
+	endif
+	if filereadable(l:exclude) ? !filewritable(l:exclude) : filewritable(a:dir . '/.git/info') != 2
 		return
 	endif
 	let l:lines = filereadable(l:exclude) ? readfile(l:exclude) : []
@@ -86,8 +90,8 @@ function! s:MakeTags(dir, what, verbose) abort
 	endif
 	if index(a:what, 'cscope') >= 0 && executable('cscope')
 		let l:names = join(map(copy(g:cscope_file_exts), '"-name ''*." . v:val . "''"'), ' -o ')
-		call add(l:cmds, 'find . -path ./.git -prune -o -type f \( ' . l:names . ' \) -print > cscope.files'
-					\ . ' && if [ -s cscope.files ]; then cscope -bq -i cscope.files; else rm -f cscope.files; fi')
+		call add(l:cmds, '{ find . -path ./.git -prune -o -type f \( ' . l:names . ' \) -print 2>/dev/null > cscope.files'
+					\ . '; if [ -s cscope.files ]; then cscope -bq -i cscope.files; else rm -f cscope.files; fi; }')
 	endif
 	if empty(l:cmds)
 		if a:verbose
@@ -97,7 +101,7 @@ function! s:MakeTags(dir, what, verbose) abort
 	endif
 	call s:GitExclude(a:dir)
 	call job_start(['sh', '-c', join(l:cmds, ' && ')],
-				\ {'cwd': a:dir, 'exit_cb': function('s:MakeTagsDone', [a:dir, a:what, a:verbose])})
+				\ {'cwd': a:dir, 'in_io': 'null', 'out_io': 'null', 'err_io': 'null', 'exit_cb': function('s:MakeTagsDone', [a:dir, a:what, a:verbose])})
 endfunction
 
 function! s:TagsOnStartup() abort
@@ -111,7 +115,7 @@ function! s:TagsOnStartup() abort
 	if empty(l:db)
 		call add(l:missing, 'cscope')
 	endif
-	if !empty(l:missing) && s:IsProjectRoot(l:dir)
+	if !empty(l:missing) && filewritable(l:dir) == 2 && s:IsProjectRoot(l:dir)
 		call s:MakeTags(l:dir, l:missing, 0)
 	endif
 endfunction
