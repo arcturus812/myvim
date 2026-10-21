@@ -7,6 +7,11 @@ if !exists('s:buffer_data')
     let s:buffer_data = {}
 endif
 
+let s:is_windows = has('win32') || has('win64') || has('win32unix')
+
+" The regular expression used for formatting filenames with modifiers.
+let s:path_format_regex = '\v\%s(%(:h|:t|:r|:e)*)'
+
 " Used to get the data in tests.
 function! ale#command#GetData() abort
     return deepcopy(s:buffer_data)
@@ -23,6 +28,19 @@ function! ale#command#InitData(buffer) abort
         \   'file_list': [],
         \   'directory_list': [],
         \}
+    endif
+endfunction
+
+" Set the cwd for commands that are about to run.
+" Used internally.
+function! ale#command#SetCwd(buffer, cwd) abort
+    call ale#command#InitData(a:buffer)
+    let s:buffer_data[a:buffer].cwd = a:cwd
+endfunction
+
+function! ale#command#ResetCwd(buffer) abort
+    if has_key(s:buffer_data, a:buffer)
+        let s:buffer_data[a:buffer].cwd = v:null
     endif
 endfunction
 
@@ -124,7 +142,7 @@ function! s:TemporaryFilename(buffer) abort
 
     " Create a temporary filename, <temp_dir>/<original_basename>
     " The file itself will not be created by this function.
-    return ale#util#Tempname() . (has('win32') ? '\' : '/') . l:filename
+    return ale#path#GetAbsPath(ale#util#Tempname(), l:filename)
 endfunction
 
 " Given part of a command, replace any % with %%, so that no characters in
@@ -133,13 +151,61 @@ function! ale#command#EscapeCommandPart(command_part) abort
     return substitute(a:command_part, '%', '%%', 'g')
 endfunction
 
+" Format a filename, converting it with filename mappings, if non-empty,
+" and escaping it for putting into a command string.
+"
+" The filename can be modified.
+function! s:FormatFilename(filename, mappings, modifiers) abort
+    let l:filename = a:filename
+
+    if !empty(a:mappings)
+        let l:filename = ale#filename_mapping#Map(l:filename, a:mappings)
+    endif
+
+    if !empty(a:modifiers)
+        let l:filename = fnamemodify(l:filename, a:modifiers)
+    endif
+
+    return ale#Escape(l:filename)
+endfunction
+
+" Produce a command prefix to check to a particular directory for a command.
+" %s format markers with filename-modifiers can be used as the directory, and
+" will be returned verbatim for formatting in paths relative to files.
+function! ale#command#CdString(directory) abort
+    let l:match = matchstrpos(a:directory, s:path_format_regex)
+    " Do not escape the directory here if it's a valid format string.
+    " This allows us to use sequences like %s:h, %s:h:h, etc.
+    let l:directory = l:match[1:] == [0, len(a:directory)]
+    \   ? a:directory
+    \   : ale#Escape(a:directory)
+
+    if s:is_windows
+        return 'cd /d ' . l:directory . ' && '
+    endif
+
+    return 'cd ' . l:directory . ' && '
+endfunction
+
 " Given a command string, replace every...
 " %s -> with the current filename
 " %t -> with the name of an unused file in a temporary directory
 " %% -> with a literal %
-function! ale#command#FormatCommand(buffer, executable, command, pipe_file_if_needed, input) abort
+function! ale#command#FormatCommand(
+\   buffer,
+\   executable,
+\   command,
+\   pipe_file_if_needed,
+\   input,
+\   cwd,
+\   mappings,
+\) abort
     let l:temporary_file = ''
     let l:command = a:command
+
+    if !empty(a:cwd)
+        let l:command = ale#command#CdString(a:cwd) . l:command
+    endif
 
     " First replace all uses of %%, used for literal percent characters,
     " with an ugly string.
@@ -154,14 +220,24 @@ function! ale#command#FormatCommand(buffer, executable, command, pipe_file_if_ne
     " file.
     if l:command =~# '%s'
         let l:filename = fnamemodify(bufname(a:buffer), ':p')
-        let l:command = substitute(l:command, '%s', '\=ale#Escape(l:filename)', 'g')
+        let l:command = substitute(
+        \   l:command,
+        \   s:path_format_regex,
+        \   '\=s:FormatFilename(l:filename, a:mappings, submatch(1))',
+        \   'g'
+        \)
     endif
 
     if a:input isnot v:false && l:command =~# '%t'
         " Create a temporary filename, <temp_dir>/<original_basename>
         " The file itself will not be created by this function.
         let l:temporary_file = s:TemporaryFilename(a:buffer)
-        let l:command = substitute(l:command, '%t', '\=ale#Escape(l:temporary_file)', 'g')
+        let l:command = substitute(
+        \   l:command,
+        \   '\v\%t(%(:h|:t|:r|:e)*)',
+        \   '\=s:FormatFilename(l:temporary_file, a:mappings, submatch(1))',
+        \   'g'
+        \)
     endif
 
     " Finish formatting so %% becomes %.
@@ -244,9 +320,16 @@ function! s:ExitCallback(buffer, line_list, Callback, data) abort
     let l:result = a:data.result
     let l:result.value = l:value
 
-    if get(l:result, 'result_callback', v:null) isnot v:null
-        call call(l:result.result_callback, [l:value])
-    endif
+    " Set the default cwd for this buffer in this call stack.
+    call ale#command#SetCwd(a:buffer, l:result.cwd)
+
+    try
+        if get(l:result, 'result_callback', v:null) isnot v:null
+            call call(l:result.result_callback, [l:value])
+        endif
+    finally
+        call ale#command#ResetCwd(a:buffer)
+    endtry
 endfunction
 
 function! ale#command#Run(buffer, command, Callback, ...) abort
@@ -258,6 +341,13 @@ function! ale#command#Run(buffer, command, Callback, ...) abort
 
     let l:output_stream = get(l:options, 'output_stream', 'stdout')
     let l:line_list = []
+    let l:cwd = get(l:options, 'cwd', v:null)
+
+    if l:cwd is v:null
+        " Default the working directory to whatever it was for the last
+        " command run in the chain.
+        let l:cwd = get(get(s:buffer_data, a:buffer, {}), 'cwd', v:null)
+    endif
 
     let [l:temporary_file, l:command, l:file_created] = ale#command#FormatCommand(
     \   a:buffer,
@@ -265,6 +355,8 @@ function! ale#command#Run(buffer, command, Callback, ...) abort
     \   a:command,
     \   get(l:options, 'read_buffer', 0),
     \   get(l:options, 'input', v:null),
+    \   l:cwd,
+    \   get(l:options, 'filename_mappings', []),
     \)
     let l:command = ale#job#PrepareCommand(a:buffer, l:command)
     let l:job_options = {
@@ -302,7 +394,7 @@ function! ale#command#Run(buffer, command, Callback, ...) abort
             let s:fake_job_id = get(s:, 'fake_job_id', 0) + 1
             let l:job_id = s:fake_job_id
         endif
-    elseif has('win32')
+    elseif s:is_windows
         let l:job_id = ale#job#StartWithCmd(l:command, l:job_options)
     else
         let l:job_id = ale#job#Start(l:command, l:job_options)
@@ -330,10 +422,14 @@ function! ale#command#Run(buffer, command, Callback, ...) abort
     " The `_deferred_job_id` is used for both checking the type of object, and
     " for checking the job ID and status.
     "
+    " The cwd is kept and used as the default value for the next command in
+    " the chain.
+    "
     " The original command here is used in tests.
     let l:result = {
     \   '_deferred_job_id': l:job_id,
     \   'executable': get(l:options, 'executable', ''),
+    \   'cwd': l:cwd,
     \   'command': a:command,
     \}
 

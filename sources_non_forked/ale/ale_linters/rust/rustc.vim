@@ -1,7 +1,7 @@
 " Author: Daniel Schemala <istjanichtzufassen@gmail.com>
 " Description: rustc for rust files
 
-call ale#Set('rust_rustc_options', '-Z no-codegen')
+call ale#Set('rust_rustc_options', '--emit=mir -o /dev/null')
 
 function! ale_linters#rust#rustc#RustcCommand(buffer) abort
     " Try to guess the library search path. If the project is managed by cargo,
@@ -20,7 +20,7 @@ function! ale_linters#rust#rustc#RustcCommand(buffer) abort
     let l:options = ale#Var(a:buffer, 'rust_rustc_options')
 
     return 'rustc --error-format=json'
-    \   . (!empty(l:options) ? ' ' . l:options : '')
+    \   . ale#Pad(l:options)
     \   . l:dependencies . ' -'
 endfunction
 

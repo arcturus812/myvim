@@ -8,7 +8,11 @@ map <F1>  :vert resize 80<CR>
 map <F2>  :vert resize 30<CR>
 map <F10> :diffthis<CR>
 map <F11> :NERDTreeToggle<CR>
-map <F12> :Tlist<CR>
+if executable('ctags')
+	map <F12> :Tlist<CR>
+else
+	map <F12> :echoerr 'taglist requires ctags (e.g. dnf install ctags)'<CR>
+endif
 let Tlist_Use_Right_Window = 0
 
 set number

@@ -2,7 +2,7 @@
 " Filename: autoload/lightline.vim
 " Author: itchyny
 " License: MIT License
-" Last Change: 2018/11/24 12:00:00.
+" Last Change: 2026/10/06 08:20:13.
 " =============================================================================
 
 let s:save_cpo = &cpo
@@ -11,33 +11,38 @@ set cpo&vim
 let s:_ = 1 " 1: uninitialized, 2: disabled
 
 function! lightline#update() abort
+  if s:skip() | return | endif
   if s:_
     if s:_ == 2 | return | endif
     call lightline#init()
     call lightline#colorscheme()
   endif
-  if !s:lightline.enable.statusline
-    return
+  if s:lightline.enable.statusline
+    let w = winnr()
+    let s = winnr('$') == 1 && w > 0 ? [lightline#statusline(0)] : [lightline#statusline(0), lightline#statusline(1)]
+    for n in range(1, winnr('$'))
+      if !s:skip(n)
+        call setwinvar(n, '&statusline', s[n!=w])
+      endif
+    endfor
   endif
-  let w = winnr()
-  let s = winnr('$') == 1 ? [lightline#statusline(0)] : [lightline#statusline(0), lightline#statusline(1)]
-  for n in range(1, winnr('$'))
-    call setwinvar(n, '&statusline', s[n!=w])
-    call setwinvar(n, 'lightline', n!=w)
-  endfor
 endfunction
 
-function! lightline#update_once() abort
-  if !exists('w:lightline') || w:lightline
-    call lightline#update()
-  endif
-endfunction
+if exists('*win_gettype')
+  function! s:skip(...) abort " Vim 8.2.0257 (00f3b4e007), 8.2.0991 (0fe937fd86), 8.2.0996 (40a019f157)
+    let type = call('win_gettype', a:000)
+    return type ==# 'popup' || type ==# 'autocmd'
+  endfunction
+else
+  function! s:skip(...) abort
+    return &buftype ==# 'popup'
+  endfunction
+endif
 
 function! lightline#update_disable() abort
-  if !s:lightline.enable.statusline
-    return
+  if s:lightline.enable.statusline
+    call setwinvar(0, '&statusline', '')
   endif
-  call setwinvar(0, '&statusline', '')
 endfunction
 
 function! lightline#enable() abort
@@ -45,11 +50,13 @@ function! lightline#enable() abort
   call lightline#update()
   augroup lightline
     autocmd!
-    autocmd WinEnter,BufWinEnter,FileType,SessionLoadPost * call lightline#update()
+    autocmd WinEnter,BufEnter,SessionLoadPost,FileChangedShellPost * call lightline#update()
+    if !has('patch-8.1.1715')
+      autocmd FileType qf call lightline#update()
+    endif
     autocmd SessionLoadPost * call lightline#highlight()
     autocmd ColorScheme * if !has('vim_starting') || expand('<amatch>') !=# 'macvim'
           \ | call lightline#update() | call lightline#highlight() | endif
-    autocmd CursorMoved,BufUnload * call lightline#update_once()
   augroup END
   augroup lightline-disable
     autocmd!
@@ -58,12 +65,21 @@ function! lightline#enable() abort
 endfunction
 
 function! lightline#disable() abort
-  let [&statusline, &tabline] = [get(s:, '_statusline', ''), get(s:, '_tabline', '')]
-  for t in range(1, tabpagenr('$'))
-    for n in range(1, tabpagewinnr(t, '$'))
-      call settabwinvar(t, n, '&statusline', '')
+  if exists('s:_statusline')
+    let &statusline = s:_statusline
+    unlet s:_statusline
+  endif
+  if exists('s:_tabline')
+    let &tabline = s:_tabline
+    unlet s:_tabline
+  endif
+  if !exists('s:lightline') || s:lightline.enable.statusline
+    for t in range(1, tabpagenr('$'))
+      for n in range(1, tabpagewinnr(t, '$'))
+        call settabwinvar(t, n, '&statusline', '')
+      endfor
     endfor
-  endfor
+  endif
   augroup lightline
     autocmd!
   augroup END
@@ -106,7 +122,7 @@ let s:_lightline = {
       \     'paste': '%{&paste?"PASTE":""}', 'readonly': '%R', 'charvalue': '%b', 'charvaluehex': '%B',
       \     'spell': '%{&spell?&spelllang:""}', 'fileencoding': '%{&fenc!=#""?&fenc:&enc}', 'fileformat': '%{&ff}',
       \     'filetype': '%{&ft!=#""?&ft:"no ft"}', 'percent': '%3p%%', 'percentwin': '%P',
-      \     'lineinfo': '%3l:%-2v', 'line': '%l', 'column': '%c', 'close': '%999X X ', 'winnr': '%{winnr()}'
+      \     'lineinfo': '%3l:%-2c', 'line': '%l', 'column': '%c', 'close': '%999X X ', 'winnr': '%{winnr()}'
       \   },
       \   'component_visible_condition': {
       \     'modified': '&modified||!&modifiable', 'readonly': '&readonly', 'paste': '&paste', 'spell': '&spell'
@@ -141,7 +157,6 @@ let s:_lightline = {
       \   },
       \   'mode_fallback': { 'replace': 'insert', 'terminal': 'insert', 'select': 'visual' },
       \   'palette': {},
-      \   'winwidth': winwidth(0),
       \ }
 function! lightline#init() abort
   let s:lightline = deepcopy(get(g:, 'lightline', {}))
@@ -165,16 +180,21 @@ function! lightline#init() abort
       break
     endif
   endfor
-  if !exists('s:_statusline')
-    let s:_statusline = &statusline
-  endif
-  if !exists('s:_tabline')
-    let s:_tabline = &tabline
+  if s:lightline.enable.statusline
+    if !exists('s:_statusline')
+      let s:_statusline = &statusline
+    endif
+  elseif exists('s:_statusline')
+    unlet s:_statusline
   endif
   if s:lightline.enable.tabline
+    if !exists('s:_tabline')
+      let s:_tabline = &tabline
+    endif
     set tabline=%!lightline#tabline()
-  else
-    let &tabline = get(s:, '_tabline', '')
+  elseif exists('s:_tabline')
+    let &tabline = s:_tabline
+    unlet s:_tabline
   endif
   for f in values(s:lightline.component_function)
     silent! call call(f, [])
@@ -194,13 +214,7 @@ function! lightline#colorscheme() abort
     let s:lightline.palette = g:lightline#colorscheme#{s:lightline.colorscheme}#palette
   finally
     if has('win32') && !has('gui_running') && &t_Co < 256
-      for u in values(s:lightline.palette)
-        for v in values(u)
-          for _  in v
-            let [_[2], _[3]] = [lightline#colortable#gui2cui(_[0], _[2]), lightline#colortable#gui2cui(_[1], _[3])]
-          endfor
-        endfor
-      endfor
+      call lightline#colortable#gui2cui_palette(s:lightline.palette)
     endif
     let s:highlight = {}
     call lightline#highlight('normal')
@@ -220,7 +234,7 @@ endfunction
 let s:mode = ''
 function! lightline#link(...) abort
   let mode = get(s:lightline._mode_, a:0 ? a:1 : mode(), 'normal')
-  if s:mode == mode
+  if s:mode ==# mode
     return ''
   endif
   let s:mode = mode
@@ -293,14 +307,15 @@ function! lightline#highlight(...) abort
     endfor
     exec printf('hi LightlineMiddle_%s guifg=%s guibg=%s ctermfg=%s ctermbg=%s %s', mode, ms[0], ms[1], ms[2], ms[3], s:term(ms))
   endfor
+  if !a:0 | let s:mode = '' | endif
 endfunction
 
-function! s:subseparator(components, subseparator, expanded) abort
-  let [a, c, f, v, u] = [a:components, s:lightline.component, s:lightline.component_function, s:lightline.component_visible_condition, s:lightline.component_function_visible_condition]
-  let xs = map(range(len(a:components)), 'a:expanded[v:val] ? "1" :
-        \ has_key(f, a[v:val]) ? (has_key(u, a[v:val]) ? "(".u[a[v:val]].")" : (exists("*".f[a[v:val]]) ? "" : "exists(\"*".f[a[v:val]]."\")&&").f[a[v:val]]."()!=#\"\"") :
-        \ has_key(v, a[v:val]) ? "(".v[a[v:val]].")" : has_key(c, a[v:val]) ? "1" : "0"')
-  return '%{' . (xs[0] ==# '1' || xs[0] ==# '(1)' ? '' : xs[0] . '&&(') . join(xs[1:], '||') . (xs[0] ==# '1' || xs[0] ==# '(1)' ? '' : ')') . '?"' . a:subseparator . '":""}'
+function! s:subseparators(components, subseparator, expanded) abort
+  let [c, f, v, u] = [s:lightline.component, s:lightline.component_function, s:lightline.component_visible_condition, s:lightline.component_function_visible_condition]
+  let xs = map(copy(a:components), 'a:expanded[v:key] ? "1" :
+        \ has_key(f, v:val) ? (has_key(u, v:val) ? "(".u[v:val].")" : (exists("*".f[v:val]) ? "" : "exists(\"*".f[v:val]."\")&&").f[v:val]."()!=#\"\"") :
+        \ has_key(v, v:val) ? "(".v[v:val].")" : has_key(c, v:val) ? "1" : "0"')
+  return map(xs[:-2], '"%{" . (v:val ==# "1" || v:val ==# "(1)" ? "" : v:val . "&&") . "(" . join(xs[v:key+1:], "||") . ")?\"" . a:subseparator . "\":\"\"}"')
 endfunction
 
 function! lightline#concatenate(xs, right) abort
@@ -315,91 +330,50 @@ function! lightline#statusline(inactive) abort
   return s:line(0, a:inactive)
 endfunction
 
-function! s:normalize(result) abort
-  if type(a:result) == 3
-    return map(a:result, 'type(v:val) == 1 ? v:val : string(v:val)')
-  elseif type(a:result) == 1
-    return [a:result]
+function! s:expand_value(component) abort
+  try | let value = eval(a:component . '()') | catch | return [] | endtry
+  return value is '' ? [] :
+        \ map(type(value) == 3 ? value : [[], [value], []],
+        \ 'filter(map(type(v:val) == 3 ? v:val : [v:val],
+        \            "type(v:val) == 1 ? v:val : string(v:val)"),
+        \        "v:val !=# ''''")')
+endfunction
+
+function! s:expand_component(name, index) abort
+  if !has_key(s:lightline.component_expand, a:name)
+    return [[[a:name], [0], a:index]]
   else
-    return [string(a:result)]
-  endif
-endfunction
-
-function! s:evaluate_expand(component) abort
-  try
-    let result = eval(a:component . '()')
-    if type(result) == 1 && result ==# ''
-      return []
-    endif
-  catch
-    return []
-  endtry
-  return map(type(result) == 3 ? (result + [[], [], []])[:2] : [[], [result], []], 'filter(s:normalize(v:val), "v:val !=# ''''")')
-endfunction
-
-function! s:convert(name, index) abort
-  if has_key(s:lightline.component_expand, a:name)
     let type = get(s:lightline.component_type, a:name, a:index)
     let is_raw = get(s:lightline.component_raw, a:name) || type ==# 'raw'
-    return filter(s:map(s:evaluate_expand(s:lightline.component_expand[a:name]),
-          \ '[v:val, 1 + ' . is_raw . ', v:key == 1 && ' . (type !=# 'raw') . ' ? "' . type . '" : "' . a:index . '", "' . a:index . '"]'), 'v:val[0] != []')
-  else
-    return [[[a:name], 0, a:index, a:index]]
+    return filter(map(s:expand_value(s:lightline.component_expand[a:name]),
+          \ '[v:val, repeat([' . (1 + is_raw) . '], len(v:val)), v:key == 1 && ' .
+          \ (type !=# 'raw') . ' ? "' . type . '" : "' . a:index . '"]'), 'v:val[0] != []')
   endif
 endfunction
 
-function! s:flatten_twice(xss) abort
-  let ys = []
-  for xs in a:xss
-    for x in xs
-      let ys += x
-    endfor
-  endfor
-  return ys
+function! s:expand_group(names, index) abort
+  if empty(filter(copy(a:names), 'has_key(s:lightline.component_expand, v:val)'))
+    return [[a:names, repeat([0], len(a:names)), a:index]]
+  endif
+  let xs = []
+  call map(copy(a:names), 'extend(xs, s:expand_component(v:val, a:index))')
+  return empty(xs) ? [[[], [], a:index]] : xs
 endfunction
 
-if v:version > 702 || v:version == 702 && has('patch295')
-  let s:map = function('map')
-else
-  function! s:map(xs, f) abort
-    let ys = []
-    for i in range(len(a:xs))
-      call extend(ys, map(a:xs[(i):(i)], substitute(a:f, 'v:key', i, 'g')))
-    endfor
-    return ys
-  endfunction
-endif
-
 function! s:expand(components) abort
-  let components = []
-  let expanded = []
-  let indices = []
-  let prevtype = ''
-  let previndex = -1
-  let xs = s:flatten_twice(s:map(deepcopy(a:components), 'map(v:val, "s:convert(v:val, ''" . v:key . "'')")'))
-  for [component, expand, type, index] in xs
-    if prevtype !=# type
-      for i in range(previndex + 1, max([previndex, index - 1]))
-        call add(indices, string(i))
-        call add(components, [])
-        call add(expanded, [])
-      endfor
-      call add(indices, type)
-      call add(components, [])
-      call add(expanded, [])
-    endif
-    call extend(components[-1], component)
-    call extend(expanded[-1], repeat([expand], len(component)))
-    let prevtype = type
-    let previndex = index
-  endfor
-  for i in range(previndex + 1, max([previndex, len(a:components) - 1]))
-    call add(indices, string(i))
-    call add(components, [])
-    call add(expanded, [])
-  endfor
+  let xs = []
+  call map(copy(a:components), 'extend(xs, s:expand_group(v:val, string(v:key)))')
+  let [components, expanded, indices] = [[], [], ['']]
+  call map(xs, '[v:val[2] ==# indices[-1] ? 0 :
+        \ [add(components, []), add(expanded, []), add(indices, v:val[2])],
+        \ extend(components[-1], v:val[0]), extend(expanded[-1], v:val[1])]')
+  call remove(indices, 0)
   call add(indices, string(len(a:components)))
   return [components, expanded, indices]
+endfunction
+
+function! s:func(name) abort
+  return exists('*' . a:name) ? '%{' . a:name . '()}' : '%{exists("*' . a:name . '")?' . a:name . '():""}'
 endfunction
 
 function! s:line(tabline, inactive) abort
@@ -411,33 +385,31 @@ function! s:line(tabline, inactive) abort
   let [p, s] = a:tabline ? [s:lightline.tabline_separator, s:lightline.tabline_subseparator] : [s:lightline.separator, s:lightline.subseparator]
   let [c, f, t, w] = [s:lightline.component, s:lightline.component_function, s:lightline.component_type, s:lightline.component_raw]
   let mode = a:tabline ? 'tabline' : a:inactive ? 'inactive' : 'active'
-  let l_ = has_key(s:lightline, mode) ? s:lightline[mode].left : s:lightline.active.left
-  let [lt, lc, ll] = s:expand(copy(l_))
-  let r_ = has_key(s:lightline, mode) ? s:lightline[mode].right : s:lightline.active.right
-  let [rt, rc, rl] = s:expand(copy(r_))
-  for i in range(len(lt))
-    let _ .= '%#LightlineLeft_' . mode . '_' . ll[i] . '#'
-    for j in range(len(lt[i]))
-      let x = lc[i][j] ? lt[i][j] : has_key(f, lt[i][j]) ? (exists('*' . f[lt[i][j]]) ? '%{' . f[lt[i][j]] . '()}' : '%{exists("*' . f[lt[i][j]] . '")?' . f[lt[i][j]] . '():""}') : get(c, lt[i][j], '')
-      let _ .= has_key(t, lt[i][j]) && t[lt[i][j]] ==# 'raw' || get(w, lt[i][j]) || lc[i][j] ==# 2 || x ==# '' ? x : '%( ' . x . ' %)'
-      if j < len(lt[i]) - 1 && s.left !=# ''
-        let _ .= s:subseparator(lt[i][(j):], s.left, lc[i][(j):])
-      endif
+  let ls = has_key(s:lightline, mode) ? s:lightline[mode].left : s:lightline.active.left
+  let [lc, le, li] = s:expand(ls)
+  let rs = has_key(s:lightline, mode) ? s:lightline[mode].right : s:lightline.active.right
+  let [rc, re, ri] = s:expand(rs)
+  for i in range(len(lc))
+    let _ .= '%#LightlineLeft_' . mode . '_' . li[i] . '#'
+    let ss = s.left !=# '' ? s:subseparators(lc[i], s.left, le[i]) : []
+    for j in range(len(lc[i]))
+      let x = le[i][j] ? lc[i][j] : has_key(f, lc[i][j]) ? s:func(f[lc[i][j]]) : get(c, lc[i][j], '')
+      let _ .= has_key(t, lc[i][j]) && t[lc[i][j]] ==# 'raw' || get(w, lc[i][j]) || le[i][j] ==# 2 || x ==# '' ? x : '%( ' . x . ' %)'
+      let _ .= get(ss, j, '')
     endfor
-    let _ .= '%#LightlineLeft_' . mode . '_' . ll[i] . '_' . ll[i + 1] . '#'
-    let _ .= i < l + len(lt) - len(l_) && ll[i] < l || ll[i] != ll[i + 1] ? p.left : len(lt[i]) ? s.left : ''
+    let _ .= '%#LightlineLeft_' . mode . '_' . li[i] . '_' . li[i + 1] . '#'
+    let _ .= i < l + len(lc) - len(ls) && li[i] < l || li[i] != li[i + 1] ? p.left : len(lc[i]) ? s.left : ''
   endfor
   let _ .= '%#LightlineMiddle_' . mode . '#%='
-  for i in reverse(range(len(rt)))
-    let _ .= '%#LightlineRight_' . mode . '_' . rl[i] . '_' . rl[i + 1] . '#'
-    let _ .= i < r + len(rt) - len(r_) && rl[i] < r || rl[i] != rl[i + 1] ? p.right : len(rt[i]) ? s.right : ''
-    let _ .= '%#LightlineRight_' . mode . '_' . rl[i] . '#'
-    for j in range(len(rt[i]))
-      let x = rc[i][j] ? rt[i][j] : has_key(f, rt[i][j]) ? (exists('*' . f[rt[i][j]]) ? '%{' . f[rt[i][j]] . '()}' : '%{exists("*' . f[rt[i][j]] . '")?' . f[rt[i][j]] . '():""}') : get(c, rt[i][j], '')
-      let _ .= has_key(t, rt[i][j]) && t[rt[i][j]] ==# 'raw' || get(w, rt[i][j]) || rc[i][j] ==# 2 || x ==# '' ? x : '%( ' . x . ' %)'
-      if j < len(rt[i]) - 1 && s.right !=# ''
-        let _ .= s:subseparator(rt[i][(j):], s.right, rc[i][(j):])
-      endif
+  for i in range(len(rc) - 1, 0, -1)
+    let _ .= '%#LightlineRight_' . mode . '_' . ri[i] . '_' . ri[i + 1] . '#'
+    let _ .= i < r + len(rc) - len(rs) && ri[i] < r || ri[i] != ri[i + 1] ? p.right : len(rc[i]) ? s.right : ''
+    let _ .= '%#LightlineRight_' . mode . '_' . ri[i] . '#'
+    let ss = s.right !=# '' ? s:subseparators(rc[i], s.right, re[i]) : []
+    for j in range(len(rc[i]))
+      let x = re[i][j] ? rc[i][j] : has_key(f, rc[i][j]) ? s:func(f[rc[i][j]]) : get(c, rc[i][j], '')
+      let _ .= has_key(t, rc[i][j]) && t[rc[i][j]] ==# 'raw' || get(w, rc[i][j]) || re[i][j] ==# 2 || x ==# '' ? x : '%( ' . x . ' %)'
+      let _ .= get(ss, j, '')
     endfor
   endfor
   return _
@@ -445,14 +417,16 @@ endfunction
 
 let s:tabnr = -1
 let s:tabcnt = -1
+let s:columns = -1
 let s:tabline = ''
 function! lightline#tabline() abort
   if !has_key(s:highlight, 'tabline')
     call lightline#highlight('tabline')
   endif
-  if s:lightline.tabline_configured || s:tabnr != tabpagenr() || s:tabcnt != tabpagenr('$')
+  if s:lightline.tabline_configured || s:tabnr != tabpagenr() || s:tabcnt != tabpagenr('$') || s:columns != &columns
     let s:tabnr = tabpagenr()
     let s:tabcnt = tabpagenr('$')
+    let s:columns = &columns
     let s:tabline = s:line(1, 0)
   endif
   return s:tabline
@@ -463,10 +437,10 @@ function! lightline#tabs() abort
   let nr = tabpagenr()
   let cnt = tabpagenr('$')
   for i in range(1, cnt)
-    call add(i < nr ? x : i == nr ? y : z, (i > nr + 3 ? '%<' : '') . '%'. i . 'T%{lightline#onetab(' . i . ',' . (i == nr) . ')}' . (i == cnt ? '%T' : ''))
+    call add(i < nr ? x : i == nr ? y : z, (i > nr + 3 ? '%<' : '') . '%' . i . 'T%{lightline#onetab(' . i . ',' . (i == nr) . ')}' . (i == cnt ? '%T' : ''))
   endfor
   let abbr = '...'
-  let n = min([max([s:lightline.winwidth / 40, 2]), 8])
+  let n = min([max([&columns / 40, 2]), 8])
   if len(x) > n && len(z) > n
     let x = extend(add(x[:n/2-1], abbr), x[-(n+1)/2:])
     let z = extend(add(z[:(n+1)/2-1], abbr), z[-n/2:])

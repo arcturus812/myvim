@@ -6,7 +6,7 @@ call ale#Set('textlint_use_global', get(g:, 'ale_use_global_executables', 0))
 call ale#Set('textlint_options', '')
 
 function! ale#handlers#textlint#GetExecutable(buffer) abort
-    return ale#node#FindExecutable(a:buffer, 'textlint', [
+    return ale#path#FindExecutable(a:buffer, 'textlint', [
     \   'node_modules/.bin/textlint',
     \   'node_modules/textlint/bin/textlint.js',
     \])
@@ -17,7 +17,7 @@ function! ale#handlers#textlint#GetCommand(buffer) abort
     let l:options = ale#Var(a:buffer, 'textlint_options')
 
     return ale#node#Executable(a:buffer, l:executable)
-    \    . (!empty(l:options) ? ' ' . l:options : '')
+    \    . ale#Pad(l:options)
     \    . ' -f json --stdin --stdin-filename %s'
 endfunction
 

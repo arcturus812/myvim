@@ -5,7 +5,7 @@ call ale#Set('sass_sasslint_options', '')
 call ale#Set('sass_sasslint_use_global', get(g:, 'ale_use_global_executables', 0))
 
 function! ale_linters#sass#sasslint#GetExecutable(buffer) abort
-    return ale#node#FindExecutable(a:buffer, 'sass_sasslint', [
+    return ale#path#FindExecutable(a:buffer, 'sass_sasslint', [
     \   'node_modules/sass-lint/bin/sass-lint.js',
     \   'node_modules/.bin/sass-lint',
     \])
@@ -16,7 +16,7 @@ function! ale_linters#sass#sasslint#GetCommand(buffer) abort
     let l:options = ale#Var(a:buffer, 'sass_sasslint_options')
 
     return ale#node#Executable(a:buffer, l:executable)
-    \   . (!empty(l:options) ? ' ' . l:options : '')
+    \   . ale#Pad(l:options)
     \   . ' -v -q -f compact %t'
 endfunction
 

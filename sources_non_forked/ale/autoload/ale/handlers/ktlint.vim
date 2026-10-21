@@ -11,9 +11,9 @@ function! ale#handlers#ktlint#GetCommand(buffer) abort
     let l:rulesets = ale#handlers#ktlint#GetRulesets(a:buffer)
 
     return ale#Escape(l:executable)
-    \   . (empty(l:options) ? '' : ' ' . l:options)
-    \   . (empty(l:rulesets) ? '' : ' ' . l:rulesets)
-    \   . ' %t'
+    \   . ale#Pad(l:options)
+    \   . ale#Pad(l:rulesets)
+    \   . ' --stdin'
 endfunction
 
 function! ale#handlers#ktlint#GetRulesets(buffer) abort

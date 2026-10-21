@@ -7,23 +7,50 @@ call ale#Set('php_phpcs_options', '')
 call ale#Set('php_phpcs_executable', 'phpcs')
 call ale#Set('php_phpcs_use_global', get(g:, 'ale_use_global_executables', 0))
 
+function! ale_linters#php#phpcs#GetCwd(buffer) abort
+    let l:result = ale#path#Dirname(ale_linters#php#phpcs#FindProjectRoot(a:buffer))
+
+    return empty(l:result) ? v:null : l:result
+endfunction
+
+function! ale_linters#php#phpcs#FindProjectRoot(buffer) abort
+    let l:result = ale#path#FindNearestFile(a:buffer, 'phpcs.xml')
+
+    if empty(l:result)
+        let l:result = ale#path#FindNearestFile(a:buffer, 'phpcs.xml.dist')
+    endif
+
+    if empty(l:result)
+        let l:result = ale#path#FindNearestFile(a:buffer, '.phpcs.xml')
+    endif
+
+    if empty(l:result)
+        let l:result = ale#path#FindNearestFile(a:buffer, '.phpcs.xml.dist')
+    endif
+
+    if empty(l:result)
+        let l:result = ale#path#FindNearestFile(a:buffer, 'composer.json')
+    endif
+
+    return l:result
+endfunction
+
 function! ale_linters#php#phpcs#GetCommand(buffer) abort
     let l:standard = ale#Var(a:buffer, 'php_phpcs_standard')
     let l:standard_option = !empty(l:standard)
-    \   ? '--standard=' . l:standard
+    \   ? '--standard=' . ale#Escape(l:standard)
     \   : ''
-    let l:options = ale#Var(a:buffer, 'php_phpcs_options')
 
     return '%e -s --report=emacs --stdin-path=%s'
-    \    . ale#Pad(l:standard_option)
-    \    . ale#Pad(l:options)
+    \   . ale#Pad(l:standard_option)
+    \   . ale#Pad(ale#Var(a:buffer, 'php_phpcs_options'))
 endfunction
 
 function! ale_linters#php#phpcs#Handle(buffer, lines) abort
     " Matches against lines like the following:
     "
     " /path/to/some-filename.php:18:3: error - Line indented incorrectly; expected 4 spaces, found 2 (Generic.WhiteSpace.ScopeIndent.IncorrectExact)
-    let l:pattern = '^.*:\(\d\+\):\(\d\+\): \(.\+\) - \(.\+\) (\(.\+\))$'
+    let l:pattern = '^.*:\(\d\+\):\(\d\+\): \(.\+\) - \(.\+\) (\(.\+\)).*$'
     let l:output = []
 
     for l:match in ale#util#GetMatches(a:lines, l:pattern)
@@ -36,6 +63,7 @@ function! ale_linters#php#phpcs#Handle(buffer, lines) abort
         \   'col': l:match[2] + 0,
         \   'text': l:text,
         \   'type': l:type is# 'error' ? 'E' : 'W',
+        \   'sub_type': 'style',
         \})
     endfor
 
@@ -44,10 +72,11 @@ endfunction
 
 call ale#linter#Define('php', {
 \   'name': 'phpcs',
-\   'executable': {b -> ale#node#FindExecutable(b, 'php_phpcs', [
+\   'executable': {b -> ale#path#FindExecutable(b, 'php_phpcs', [
 \       'vendor/bin/phpcs',
 \       'phpcs'
 \   ])},
+\   'cwd': function('ale_linters#php#phpcs#GetCwd'),
 \   'command': function('ale_linters#php#phpcs#GetCommand'),
 \   'callback': 'ale_linters#php#phpcs#Handle',
 \})

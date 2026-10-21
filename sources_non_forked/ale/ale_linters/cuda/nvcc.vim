@@ -5,9 +5,6 @@ call ale#Set('cuda_nvcc_executable', 'nvcc')
 call ale#Set('cuda_nvcc_options', '-std=c++11')
 
 function! ale_linters#cuda#nvcc#GetCommand(buffer) abort
-    " Unused: use ale#util#nul_file
-    " let l:output_file = ale#util#Tempname() . '.ii'
-    " call ale#command#ManageFile(a:buffer, l:output_file)
     return '%e -cuda'
     \   . ale#Pad(ale#c#IncludeOptions(ale#c#FindLocalHeaderPaths(a:buffer)))
     \   . ale#Pad(ale#Var(a:buffer, 'cuda_nvcc_options'))
@@ -26,7 +23,7 @@ function! ale_linters#cuda#nvcc#HandleNVCCFormat(buffer, lines) abort
         \   'lnum': str2nr(l:match[2]),
         \   'type': l:match[4] =~# 'error' ? 'E' : 'W',
         \   'text': l:match[5],
-        \   'filename': fnamemodify(l:match[1], ':p'),
+        \   'filename': ale#path#Simplify(fnamemodify(l:match[1], ':p')),
         \}
 
         if !empty(l:match[3])

@@ -16,24 +16,25 @@ from os import path
 
 #--- Globals ----------------------------------------------
 PLUGINS = """
-auto-pairs https://github.com/jiangmiao/auto-pairs
-ale https://github.com/w0rp/ale
 ack.vim https://github.com/mileszs/ack.vim
+ale https://github.com/dense-analysis/ale
+auto-pairs https://github.com/jiangmiao/auto-pairs
 ctrlp.vim https://github.com/ctrlpvim/ctrlp.vim
-nerdtree https://github.com/scrooloose/nerdtree
-vim-indent-object https://github.com/michaeljsmith/vim-indent-object
-vim-markdown https://github.com/tpope/vim-markdown
-vim-surround https://github.com/tpope/vim-surround
-vim-fugitive https://github.com/tpope/vim-fugitive
-vim-repeat https://github.com/tpope/vim-repeat
-vim-commentary https://github.com/tpope/vim-commentary
-vim-gitgutter https://github.com/airblade/vim-gitgutter
 gruvbox https://github.com/morhetz/gruvbox
 lightline.vim https://github.com/itchyny/lightline.vim
-vim-markdown https://github.com/plasticboy/vim-markdown
+nerdtree https://github.com/preservim/nerdtree
+tabular https://github.com/godlygeek/tabular
+taglist https://github.com/yegappan/taglist
+vim-commentary https://github.com/tpope/vim-commentary
+vim-fugitive https://github.com/tpope/vim-fugitive
+vim-gitgutter https://github.com/airblade/vim-gitgutter
+vim-indent-object https://github.com/michaeljsmith/vim-indent-object
+vim-markdown https://github.com/preservim/vim-markdown
+vim-repeat https://github.com/tpope/vim-repeat
+vim-surround https://github.com/tpope/vim-surround
 """.strip()
 
-GITHUB_ZIP = '%s/archive/master.zip'
+GITHUB_ZIP = '%s/archive/HEAD.zip'
 
 SOURCE_DIR = path.join(path.dirname(__file__), 'sources_non_forked')
 
@@ -43,13 +44,15 @@ def download_extract_replace(plugin_name, zip_path, temp_dir, source_dir):
 
     # Download and extract file in temp dir
     req = requests.get(zip_path)
+    req.raise_for_status()
     open(temp_zip_path, 'wb').write(req.content)
 
     zip_f = zipfile.ZipFile(temp_zip_path)
     zip_f.extractall(temp_dir)
 
-    plugin_temp_path = path.join(temp_dir,
-                                 path.join(temp_dir, '%s-master' % plugin_name))
+    # The archive's top directory is named <repo>-<branch>
+    top_dir = zip_f.namelist()[0].split('/')[0]
+    plugin_temp_path = path.join(temp_dir, top_dir)
 
     # Remove the current plugin and replace it with the extracted
     plugin_dest_path = path.join(source_dir, plugin_name)
@@ -76,7 +79,7 @@ if __name__ == '__main__':
     try:
         if futures:
             with futures.ThreadPoolExecutor(16) as executor:
-                executor.map(update, PLUGINS.splitlines())
+                list(executor.map(update, PLUGINS.splitlines()))
         else:
             [update(x) for x in PLUGINS.splitlines()]
     finally:

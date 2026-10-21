@@ -59,9 +59,14 @@ autocmd FileType css set omnifunc=csscomplete#CompleteCSS
 " => Ack searching and cope displaying
 "    requires ack.vim - it's much better than vimgrep/grep
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-" Use the the_silver_searcher if possible (much faster than Ack)
-if executable('ag')
+" Use ripgrep or the_silver_searcher if possible (much faster than Ack),
+" fall back to plain grep when no ack-like tool is installed
+if executable('rg')
+  let g:ackprg = 'rg --vimgrep --smart-case'
+elseif executable('ag')
   let g:ackprg = 'ag --vimgrep --smart-case'
+elseif !executable('ack') && !executable('ack-grep')
+  let g:ackprg = 'grep -rnIH --exclude-dir=.git'
 endif
 
 " When you press gv you Ack after the selected text
