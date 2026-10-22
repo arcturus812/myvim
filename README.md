@@ -6,7 +6,7 @@
 ## 요구 사항
 
 - Vim 8.2 이상 (`+job +timers +channel`, cscope 사용 시 `+cscope`)
-- Copilot Chat은 Vim 9.0 이상 + GitHub Copilot 구독
+- Copilot 기능은 Vim 9.0 이상 + GitHub Copilot 구독 (자동완성은 Node.js 20 이상도 필요)
 - 선택 도구 (없으면 해당 기능만 비활성)
 
 | 도구 | 용도 |
@@ -53,7 +53,7 @@
 | 편집 | vim-surround, vim-repeat, vim-commentary, auto-pairs, vim-indent-object, tabular |
 | Git | vim-fugitive, vim-gitgutter, blamer.nvim |
 | 린트·UI | ale, lightline.vim, vim-markdown, gruvbox, peaksea |
-| AI | copilot-chat.vim (첫 `,cp` 때 로드) |
+| AI | copilot-chat.vim, copilot.vim (처음 사용할 때 로드) |
 
 ### 플러그인 업데이트
 
@@ -73,10 +73,14 @@
 ## Copilot Chat
 
 - `,cq`: 커서 위치에서 바로 질문하고 답을 popup으로 본다. visual 모드면 선택 영역, 아니면 커서 주변 40줄을 함께 보낸다.
+  질문에 `#buffer`를 넣으면 파일 전체, `#gitdiff`를 넣으면 이 파일의 커밋 전 변경분을 함께 보낸다.
+  `,cq`/`,ce` 모두 코드에 줄 번호와 범위 안의 ALE 진단을 붙여 보낸다.
   popup에서 `j`/`k`/`Ctrl-d`/`Ctrl-u` 스크롤, `y` 답변 복사, `q`/`Esc` 닫기.
 - `,ce`: Copilot에게 코드 수정을 요청한다. visual 모드면 선택 영역, 아니면 커서가 있는 함수(ctags)나 주변 40줄이 대상.
   결과는 바로 적용되고 삭제된 줄은 빨간 `- ` 줄, 추가·변경된 줄은 `+` 표시와 초록 배경으로 강조된다.
   우측 상단 popup에서 `y` 수락, `n` 되돌리기. 그 외 키는 평소대로 동작하므로 이동·스크롤하며 검토할 수 있다.
+- `,ca`: Copilot 자동완성 켜기/끄기 (기본 꺼짐, 켜면 입력 중 버퍼 전체가 GitHub으로 전송됨).
+  처음 한 번 `:Copilot setup`으로 로그인. `Tab` 제안 수락, `Alt-]`/`Alt-[` 다른 제안, `Ctrl-]` 무시.
 - `,cp`: 채팅 창 열기 (이어지는 대화용). visual 모드에서는 선택 영역을 채팅에 붙인다. 질문을 적고 `Enter`로 전송.
 - 처음 `,cp` 때 GitHub 기기 인증을 진행한다. 표시된 URL에서 코드를 입력하고 vim에서 `Enter`.
 - 토큰과 기록은 `~/.vim/copilot-chat`(권한 700)에 저장된다.

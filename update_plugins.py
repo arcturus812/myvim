@@ -19,6 +19,7 @@ PLUGINS = """
 ack.vim https://github.com/mileszs/ack.vim
 ale https://github.com/dense-analysis/ale
 auto-pairs https://github.com/jiangmiao/auto-pairs
+copilot.vim https://github.com/github/copilot.vim
 ctrlp.vim https://github.com/ctrlpvim/ctrlp.vim
 gruvbox https://github.com/morhetz/gruvbox
 lightline.vim https://github.com/itchyny/lightline.vim

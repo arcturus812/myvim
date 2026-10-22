@@ -9,8 +9,8 @@
 " => Load pathogen paths
 """"""""""""""""""""""""""""""
 let s:vim_runtime = expand('<sfile>:p:h')."/.."
-" copilot-chat.vim is loaded on first use (see Copilot Chat below)
-let g:pathogen_disabled = ['copilot-chat.vim']
+" Copilot plugins are loaded on first use (see Copilot Chat below)
+let g:pathogen_disabled = ['copilot-chat.vim', 'copilot.vim']
 call pathogen#infect(s:vim_runtime.'/sources_forked/{}')
 call pathogen#infect(s:vim_runtime.'/sources_non_forked/{}')
 call pathogen#infect(s:vim_runtime.'/my_plugins/{}')
@@ -204,10 +204,23 @@ function! s:CopilotReady() abort
     return 1
 endfunction
 
+" Code is sent with '<lnum>: ' prefixes plus ALE diagnostics in the range,
+" like CopilotChat.nvim does, so answers can point at exact lines
+let s:copilot_line_prefix_note = ' Code lines are prefixed with "<line number>: " for reference only;'
+            \ . ' never include these prefixes in code you write.'
+
 function! s:CopilotContext(first, last) abort
-    return printf("File: %s (lines %d-%d, cursor at line %d)\n```%s\n%s\n```",
-                \ expand('%:.'), a:first, a:last, line('.'), &filetype,
-                \ join(getline(a:first, a:last), "\n"))
+    let l:code = map(getline(a:first, a:last), {i, line -> (a:first + i) . ': ' . line})
+    let l:context = printf("File: %s (lines %d-%d, cursor at line %d)\n```%s\n%s\n```",
+                \ expand('%:.'), a:first, a:last, line('.'), &filetype, join(l:code, "\n"))
+    let l:problems = exists('*ale#engine#GetLoclist')
+                \ ? filter(copy(ale#engine#GetLoclist(bufnr('%'))), {_, item -> item.lnum >= a:first && item.lnum <= a:last})
+                \ : []
+    if !empty(l:problems)
+        let l:context .= "\nDiagnostics:\n" . join(map(l:problems,
+                    \ {_, item -> printf('%d: [%s] %s', item.lnum, get(item, 'type', 'E'), item.text)}), "\n")
+    endif
+    return l:context
 endfunction
 
 function! s:CopilotPopupFilter(winid, key) abort
@@ -259,9 +272,18 @@ function! s:CopilotPopupAsk(visual) abort
     if empty(l:question)
         return
     endif
+    " #buffer sends the whole file, #gitdiff adds the file's uncommitted git diff
+    if l:question =~# '#buffer\>'
+        let [l:first, l:last] = [1, line('$')]
+    endif
+    let l:context = s:CopilotContext(l:first, l:last)
+    if l:question =~# '#gitdiff\>'
+        let l:diff = systemlist('git -C ' . shellescape(expand('%:p:h')) . ' diff HEAD -- ' . shellescape(expand('%:p')))
+        let l:context .= "\nGit diff (uncommitted):\n```diff\n" . join(v:shell_error ? ['(not available)'] : l:diff, "\n") . "\n```"
+    endif
     let l:messages = [
-                \ {'role': 'system', 'content': 'You are a code review assistant. Answer concisely.'},
-                \ {'role': 'user', 'content': s:CopilotContext(l:first, l:last) . "\n\n" . l:question}]
+                \ {'role': 'system', 'content': 'You are a code review assistant. Answer concisely.' . s:copilot_line_prefix_note},
+                \ {'role': 'user', 'content': l:context . "\n\n" . l:question}]
     let l:winid = s:CopilotPopupOpen('Copilot: ' . l:question, ['Copilot: thinking...'])
     call s:CopilotRequest(l:messages, function('s:CopilotPopupAnswer', [l:winid]))
 endfunction
@@ -316,7 +338,7 @@ function! s:CopilotEditAsk(visual) abort
     let l:messages = [
                 \ {'role': 'system', 'content': 'You edit code. Reply with only the complete replacement'
                 \   . ' for the given lines in one fenced code block, keeping the original indentation'
-                \   . ' and style. Do not add explanations.'},
+                \   . ' and style. Do not add explanations.' . s:copilot_line_prefix_note},
                 \ {'role': 'user', 'content': s:CopilotContext(l:range[0], l:range[1]) . "\n\n" . l:request}]
     let l:pending = {'buf': bufnr('%'), 'first': l:range[0], 'last': l:range[1],
                 \ 'tick': b:changedtick, 'request': l:request}
@@ -336,6 +358,10 @@ function! s:CopilotEditApply(pending, content, error) abort
     endif
     let l:old = getline(a:pending.first, a:pending.last)
     let l:new = split(l:code[1], "\n", 1)
+    " Drop line-number prefixes if the model echoed them back anyway
+    if !empty(l:new) && len(filter(copy(l:new), {_, line -> line =~# '^\d\+: '})) == len(l:new)
+        call map(l:new, {_, line -> substitute(line, '^\d\+: ', '', '')})
+    endif
     let l:first = a:pending.first
     if l:new ==# l:old
         echo 'Copilot: no changes'
@@ -409,6 +435,29 @@ function! s:CopilotEditFinish(reject) abort
     endif
 endfunction
 
+" ,ca toggles Copilot inline completion (copilot.vim). It is off until the
+" first ,ca because it sends the whole buffer to GitHub while typing.
+" Tab accepts a suggestion, Alt-] / Alt-[ cycles, Ctrl-] dismisses.
+function! s:CopilotCompletionToggle() abort
+    if v:version < 900
+        echohl WarningMsg | echomsg 'Copilot completion requires Vim 9.0+' | echohl None
+        return
+    endif
+    if !exists('g:loaded_copilot')
+        let g:copilot_enabled = 0
+        execute 'set runtimepath+=' . fnameescape(s:vim_runtime . '/sources_non_forked/copilot.vim')
+        runtime plugin/copilot.vim
+    endif
+    if get(g:, 'copilot_enabled', 1)
+        Copilot disable
+        echo 'Copilot completion: off'
+    else
+        Copilot enable
+        echo 'Copilot completion: on (run :Copilot setup once to sign in)'
+    endif
+endfunction
+
+nnoremap <silent> <leader>ca :call <SID>CopilotCompletionToggle()<cr>
 nnoremap <silent> <leader>cq :call <SID>CopilotPopupAsk(0)<cr>
 xnoremap <silent> <leader>cq :<C-u>call <SID>CopilotPopupAsk(1)<cr>
 nnoremap <silent> <leader>ce :call <SID>CopilotEditAsk(0)<cr>
