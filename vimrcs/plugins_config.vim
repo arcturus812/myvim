@@ -9,6 +9,8 @@
 " => Load pathogen paths
 """"""""""""""""""""""""""""""
 let s:vim_runtime = expand('<sfile>:p:h')."/.."
+" copilot-chat.vim is loaded on first use (see Copilot Chat below)
+let g:pathogen_disabled = ['copilot-chat.vim']
 call pathogen#infect(s:vim_runtime.'/sources_forked/{}')
 call pathogen#infect(s:vim_runtime.'/sources_non_forked/{}')
 call pathogen#infect(s:vim_runtime.'/my_plugins/{}')
@@ -90,6 +92,9 @@ nmap <silent> <leader>a <Plug>(ale_next_wrap)
 " Disabling highlighting
 let g:ale_set_highlights = 0
 
+" Keep messages out of the line end (blamer uses it); Vim 9 enables this by default
+let g:ale_virtualtext_cursor = 'disabled'
+
 " Only run linting when saving the file
 let g:ale_lint_on_text_changed = 'never'
 let g:ale_lint_on_enter = 0
@@ -111,3 +116,41 @@ let g:blamer_show_in_insert_modes = 0
 let g:blamer_show_in_visual_modes = 0
 let g:blamer_date_format = '%Y-%m-%d'
 nnoremap <silent> <leader>bl :BlamerToggle<cr>
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" => Copilot Chat
+"    Needs Vim 9 and starts GitHub sign-in when loaded, so it is
+"    loaded on the first ,cp instead of at startup
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+function! s:CopilotChatLoad() abort
+    if v:version < 900
+        echohl WarningMsg | echomsg 'Copilot Chat requires Vim 9.0+' | echohl None
+        return 0
+    endif
+    if !exists('g:loaded_copilot_chat')
+        " Tokens live here; keep them outside the repo and private
+        let g:copilot_chat_data_dir = expand('~/.vim/copilot-chat')
+        if !isdirectory(g:copilot_chat_data_dir)
+            call mkdir(g:copilot_chat_data_dir, 'p', 0700)
+        endif
+        execute 'set runtimepath+=' . fnameescape(s:vim_runtime . '/sources_forked/copilot-chat.vim')
+        runtime plugin/copilot_chat.vim
+    endif
+    return 1
+endfunction
+
+function! s:CopilotChatOpen() abort
+    if s:CopilotChatLoad()
+        CopilotChatOpen
+    endif
+endfunction
+
+function! s:CopilotChatAddSelection() abort
+    if s:CopilotChatLoad()
+        call copilot_chat#buffer#AddSelection()
+    endif
+endfunction
+
+nnoremap <silent> <leader>cp :call <SID>CopilotChatOpen()<cr>
+xnoremap <silent> <leader>cp :<C-u>call <SID>CopilotChatAddSelection()<cr>
