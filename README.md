@@ -72,7 +72,9 @@
 
 ## Copilot Chat
 
-- `,cp`: 채팅 창 열기. visual 모드에서는 선택 영역을 채팅에 붙인다. 질문을 적고 `Enter`로 전송.
+- `,cq`: 커서 위치에서 바로 질문하고 답을 popup으로 본다. visual 모드면 선택 영역, 아니면 커서 주변 40줄을 함께 보낸다.
+  popup에서 `j`/`k`/`Ctrl-d`/`Ctrl-u` 스크롤, `y` 답변 복사, `q`/`Esc` 닫기.
+- `,cp`: 채팅 창 열기 (이어지는 대화용). visual 모드에서는 선택 영역을 채팅에 붙인다. 질문을 적고 `Enter`로 전송.
 - 처음 `,cp` 때 GitHub 기기 인증을 진행한다. 표시된 URL에서 코드를 입력하고 vim에서 `Enter`.
 - 토큰과 기록은 `~/.vim/copilot-chat`(권한 700)에 저장된다.
 - `:CopilotChatModels`로 모델 선택, `:CopilotChatReset`으로 대화 초기화.
