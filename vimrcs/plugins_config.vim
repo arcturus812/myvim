@@ -158,7 +158,57 @@ xnoremap <silent> <leader>cp :<C-u>call <SID>CopilotChatAddSelection()<cr>
 " ,cq asks Copilot in a popup at the cursor without opening a chat window.
 " Context is the visual selection, or lines around the cursor.
 " In the popup: j/k/Ctrl-d/Ctrl-u scroll, y yanks the answer, q/Esc closes.
+"
+" ,ce asks Copilot to edit the visual selection (or the function around the
+" cursor), applies the result as one undo step and highlights it: removed
+" lines show in red above, new lines in green. y keeps it, n undoes it;
+" other keys work as usual so the change can be inspected first.
 let s:copilot_popup_context_lines = 40
+let s:copilot_edit_function_kinds = ['function', 'method', 'member', 'subroutine', 'procedure', 'func']
+
+" Send chat messages to Copilot; a:Callback gets (content, error)
+function! s:CopilotRequest(messages, Callback) abort
+    let l:tmpfile = tempname()
+    call writefile([json_encode({'model': copilot_chat#models#Current(),
+                \ 'stream': v:false, 'messages': a:messages})], l:tmpfile)
+    let l:output = []
+    call job_start(['curl', '-s', '-X', 'POST',
+                \ '-H', 'Content-Type: application/json',
+                \ '-H', 'Authorization: Bearer ' . g:copilot_chat_token,
+                \ '-H', 'Editor-Version: vscode/1.107.0',
+                \ '-H', 'Editor-Plugin-Version: copilot-chat/0.36.2025121601',
+                \ '-d', '@' . l:tmpfile, 'https://api.githubcopilot.com/chat/completions'], {
+                \ 'out_cb': {ch, msg -> add(l:output, msg)},
+                \ 'exit_cb': {job, status -> s:CopilotRequestDone(l:tmpfile, l:output, status, a:Callback)}})
+endfunction
+
+function! s:CopilotRequestDone(tmpfile, output, status, Callback) abort
+    call delete(a:tmpfile)
+    try
+        let l:content = json_decode(join(a:output, '')).choices[0].message.content
+    catch
+        call a:Callback('', 'Copilot request failed (exit ' . a:status . '): ' . join(a:output, ' '))
+        return
+    endtry
+    call a:Callback(l:content, '')
+endfunction
+
+function! s:CopilotReady() abort
+    if !s:CopilotChatLoad()
+        return 0
+    endif
+    if empty(g:copilot_chat_token)
+        echohl WarningMsg | echomsg 'Copilot is still signing in; try again shortly' | echohl None
+        return 0
+    endif
+    return 1
+endfunction
+
+function! s:CopilotContext(first, last) abort
+    return printf("File: %s (lines %d-%d, cursor at line %d)\n```%s\n%s\n```",
+                \ expand('%:.'), a:first, a:last, line('.'), &filetype,
+                \ join(getline(a:first, a:last), "\n"))
+endfunction
 
 function! s:CopilotPopupFilter(winid, key) abort
     let l:scroll = {'j': 1, 'k': -1, "\<C-d>": 10, "\<C-u>": -10}
@@ -176,25 +226,26 @@ function! s:CopilotPopupFilter(winid, key) abort
     return 1
 endfunction
 
-function! s:CopilotPopupDone(winid, output, job, status) abort
-    if empty(popup_getpos(a:winid))
-        return
+function! s:CopilotPopupOpen(title, lines) abort
+    let l:winid = popup_create(a:lines, {
+                \ 'line': 'cursor+1', 'col': 'cursor', 'pos': 'topleft',
+                \ 'minwidth': 40, 'maxwidth': min([100, &columns - 4]),
+                \ 'maxheight': max([5, &lines / 2]),
+                \ 'border': [], 'padding': [0, 1, 0, 1], 'title': ' ' . a:title . ' ',
+                \ 'scrollbar': 1, 'wrap': 1, 'mapping': 0,
+                \ 'filter': function('s:CopilotPopupFilter')})
+    call setbufvar(winbufnr(l:winid), '&filetype', 'markdown')
+    return l:winid
+endfunction
+
+function! s:CopilotPopupAnswer(winid, content, error) abort
+    if !empty(popup_getpos(a:winid))
+        call popup_settext(a:winid, split(empty(a:error) ? a:content : a:error, "\n"))
     endif
-    try
-        let l:answer = json_decode(join(a:output, ''))
-        let l:lines = split(l:answer.choices[0].message.content, "\n")
-    catch
-        let l:lines = ['Copilot request failed (exit ' . a:status . '):'] + a:output
-    endtry
-    call popup_settext(a:winid, l:lines)
 endfunction
 
 function! s:CopilotPopupAsk(visual) abort
-    if !s:CopilotChatLoad()
-        return
-    endif
-    if empty(g:copilot_chat_token)
-        echohl WarningMsg | echomsg 'Copilot is still signing in; try again shortly' | echohl None
+    if !s:CopilotReady()
         return
     endif
     if a:visual
@@ -208,35 +259,157 @@ function! s:CopilotPopupAsk(visual) abort
     if empty(l:question)
         return
     endif
-    let l:context = printf("File: %s (lines %d-%d, cursor at line %d)\n```%s\n%s\n```",
-                \ expand('%:.'), l:first, l:last, line('.'), &filetype,
-                \ join(getline(l:first, l:last), "\n"))
-    let l:body = json_encode({
-                \ 'model': copilot_chat#models#Current(),
-                \ 'stream': v:false,
-                \ 'messages': [
-                \   {'role': 'system', 'content': 'You are a code review assistant. Answer concisely.'},
-                \   {'role': 'user', 'content': l:context . "\n\n" . l:question}]})
-    let l:tmpfile = tempname()
-    call writefile([l:body], l:tmpfile)
-    let l:winid = popup_create(['Copilot: thinking...'], {
-                \ 'line': 'cursor+1', 'col': 'cursor', 'pos': 'topleft',
-                \ 'minwidth': 40, 'maxwidth': min([100, &columns - 4]),
-                \ 'maxheight': max([5, &lines / 2]),
-                \ 'border': [], 'padding': [0, 1, 0, 1], 'title': ' Copilot: ' . l:question . ' ',
-                \ 'scrollbar': 1, 'wrap': 1, 'mapping': 0,
-                \ 'filter': function('s:CopilotPopupFilter')})
-    call setbufvar(winbufnr(l:winid), '&filetype', 'markdown')
-    let l:output = []
-    call job_start(['curl', '-s', '-X', 'POST',
-                \ '-H', 'Content-Type: application/json',
-                \ '-H', 'Authorization: Bearer ' . g:copilot_chat_token,
-                \ '-H', 'Editor-Version: vscode/1.107.0',
-                \ '-H', 'Editor-Plugin-Version: copilot-chat/0.36.2025121601',
-                \ '-d', '@' . l:tmpfile, 'https://api.githubcopilot.com/chat/completions'], {
-                \ 'out_cb': {ch, msg -> add(l:output, msg)},
-                \ 'exit_cb': {job, status -> [delete(l:tmpfile), s:CopilotPopupDone(l:winid, l:output, job, status)]}})
+    let l:messages = [
+                \ {'role': 'system', 'content': 'You are a code review assistant. Answer concisely.'},
+                \ {'role': 'user', 'content': s:CopilotContext(l:first, l:last) . "\n\n" . l:question}]
+    let l:winid = s:CopilotPopupOpen('Copilot: ' . l:question, ['Copilot: thinking...'])
+    call s:CopilotRequest(l:messages, function('s:CopilotPopupAnswer', [l:winid]))
+endfunction
+
+" Innermost multi-line function/method around the cursor, via ctags
+function! s:EnclosingFunction() abort
+    if !executable('ctags')
+        return []
+    endif
+    let l:tmpfile = tempname() . (empty(expand('%:e')) ? '' : '.' . expand('%:e'))
+    call writefile(getline(1, '$'), l:tmpfile)
+    let l:tags = systemlist('ctags --fields=+neK -o - ' . shellescape(l:tmpfile))
+    call delete(l:tmpfile)
+    let l:best = []
+    for l:tag in l:tags
+        let l:fields = split(matchstr(l:tag, ';"\t\zs.*'), "\t")
+        if empty(l:fields) || index(s:copilot_edit_function_kinds, l:fields[0]) < 0
+            continue
+        endif
+        let l:start = str2nr(matchstr(l:tag, '\tline:\zs\d\+'))
+        let l:end = str2nr(matchstr(l:tag, '\tend:\zs\d\+'))
+        if l:start <= line('.') && line('.') <= l:end && l:start < l:end
+                    \ && (empty(l:best) || l:start > l:best[0])
+            let l:best = [l:start, l:end]
+        endif
+    endfor
+    return l:best
+endfunction
+
+function! s:CopilotEditAsk(visual) abort
+    if exists('s:copilot_edit')
+        echohl WarningMsg | echomsg 'Finish the pending Copilot edit first (y/n)' | echohl None
+        return
+    endif
+    if !s:CopilotReady()
+        return
+    endif
+    if a:visual
+        let l:range = [line("'<"), line("'>")]
+    else
+        let l:range = s:EnclosingFunction()
+        if empty(l:range)
+            let l:range = [max([1, line('.') - s:copilot_popup_context_lines / 2]),
+                        \ min([line('$'), line('.') + s:copilot_popup_context_lines / 2])]
+        endif
+    endif
+    let l:request = input(printf('Copilot edit (lines %d-%d)> ', l:range[0], l:range[1]))
+    redraw
+    if empty(l:request)
+        return
+    endif
+    let l:messages = [
+                \ {'role': 'system', 'content': 'You edit code. Reply with only the complete replacement'
+                \   . ' for the given lines in one fenced code block, keeping the original indentation'
+                \   . ' and style. Do not add explanations.'},
+                \ {'role': 'user', 'content': s:CopilotContext(l:range[0], l:range[1]) . "\n\n" . l:request}]
+    let l:pending = {'buf': bufnr('%'), 'first': l:range[0], 'last': l:range[1],
+                \ 'tick': b:changedtick, 'request': l:request}
+    echo 'Copilot: editing...'
+    call s:CopilotRequest(l:messages, function('s:CopilotEditApply', [l:pending]))
+endfunction
+
+function! s:CopilotEditApply(pending, content, error) abort
+    let l:code = matchlist(a:content, '```[^\n]*\n\(\_.\{-}\)\n\?```')
+    if !empty(a:error) || empty(l:code)
+        call s:CopilotPopupOpen('Copilot edit: no code returned', split(empty(a:error) ? a:content : a:error, "\n"))
+        return
+    endif
+    if bufnr('%') != a:pending.buf || b:changedtick != a:pending.tick
+        call s:CopilotPopupOpen('Copilot edit not applied: buffer changed meanwhile', split(l:code[1], "\n"))
+        return
+    endif
+    let l:old = getline(a:pending.first, a:pending.last)
+    let l:new = split(l:code[1], "\n", 1)
+    let l:first = a:pending.first
+    if l:new ==# l:old
+        echo 'Copilot: no changes'
+        return
+    endif
+    " Replace as one undo step
+    let l:common = min([len(l:old), len(l:new)])
+    if l:common > 0
+        call setline(l:first, l:new[: l:common - 1])
+    endif
+    if len(l:new) > len(l:old)
+        call append(l:first + len(l:old) - 1, l:new[len(l:old) :])
+    elseif len(l:old) > len(l:new)
+        call deletebufline('%', l:first + len(l:new), l:first + len(l:old) - 1)
+    endif
+    call s:CopilotEditHighlight(l:first, l:old, l:new)
+    call cursor(l:first, 1)
+    let s:copilot_edit = {'buf': a:pending.buf, 'tick': b:changedtick}
+    let s:copilot_edit.popup = popup_create([' Accept Copilot edit? [y]es / [n]o '], {
+                \ 'line': 1, 'col': &columns, 'pos': 'topright', 'border': [],
+                \ 'title': ' ' . a:pending.request . ' ', 'highlight': 'WarningMsg',
+                \ 'mapping': 0, 'filter': function('s:CopilotEditFilter')})
+endfunction
+
+function! s:CopilotEditHighlight(first, old, new) abort
+    if empty(prop_type_get('copilot_edit_del'))
+        call prop_type_add('copilot_edit_del', {'highlight': 'DiffDelete'})
+    endif
+    call sign_define('copilot_edit_add', {'text': '+', 'linehl': 'DiffAdd', 'texthl': 'DiffAdd'})
+    let l:last_line = a:first + max([len(a:new), 1]) - 1
+    for l:hunk in diff(a:old, a:new, {'output': 'indices'})
+        for l:i in range(l:hunk.to_count)
+            call sign_place(0, 'copilot_edit', 'copilot_edit_add', '%',
+                        \ {'lnum': a:first + l:hunk.to_idx + l:i})
+        endfor
+        " Removed lines go above the hunk, or below the last line at the end
+        let l:anchor = a:first + l:hunk.to_idx
+        let l:align = l:anchor > l:last_line ? 'below' : 'above'
+        let l:anchor = min([l:anchor, l:last_line])
+        for l:line in a:old[l:hunk.from_idx : l:hunk.from_idx + l:hunk.from_count - 1]
+            call prop_add(l:anchor, 0, {'type': 'copilot_edit_del', 'text': '- ' . l:line,
+                        \ 'text_align': l:align})
+        endfor
+    endfor
+endfunction
+
+function! s:CopilotEditFilter(winid, key) abort
+    if a:key ==# 'y'
+        call s:CopilotEditFinish(0)
+    elseif a:key ==# 'n'
+        call s:CopilotEditFinish(1)
+    else
+        return 0
+    endif
+    return 1
+endfunction
+
+function! s:CopilotEditFinish(reject) abort
+    let l:edit = s:copilot_edit
+    unlet s:copilot_edit
+    call popup_close(l:edit.popup)
+    call sign_unplace('copilot_edit')
+    call prop_remove({'type': 'copilot_edit_del', 'bufnr': l:edit.buf, 'all': 1})
+    if !a:reject
+        echo 'Copilot edit accepted'
+    elseif getbufvar(l:edit.buf, 'changedtick') != l:edit.tick
+        echohl WarningMsg | echomsg 'Buffer was edited during review; undo the Copilot edit manually' | echohl None
+    else
+        call win_execute(bufwinid(l:edit.buf), 'undo')
+        echo 'Copilot edit rejected'
+    endif
 endfunction
 
 nnoremap <silent> <leader>cq :call <SID>CopilotPopupAsk(0)<cr>
 xnoremap <silent> <leader>cq :<C-u>call <SID>CopilotPopupAsk(1)<cr>
+nnoremap <silent> <leader>ce :call <SID>CopilotEditAsk(0)<cr>
+xnoremap <silent> <leader>ce :<C-u>call <SID>CopilotEditAsk(1)<cr>
